@@ -59,14 +59,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-image-preview",
+      model: "gemini-2.0-flash-preview-image-generation",
       contents,
       config: {
         responseModalities: ["TEXT", "IMAGE"],
-        imageConfig: {
-          aspectRatio: body.aspectRatio || "16:9",
-          imageSize: VALID_IMAGE_SIZES.has(body.resolution || "2K") ? (body.resolution || "2K") : "2K",
-        },
       },
     });
 
