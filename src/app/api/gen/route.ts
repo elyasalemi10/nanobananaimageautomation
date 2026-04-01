@@ -1,31 +1,25 @@
 import { GoogleAuth } from "google-auth-library";
 import { NextRequest, NextResponse } from "next/server";
 
-const PROJECT = () => process.env.GOOGLE_CLOUD_PROJECT!;
-const LOCATION = "us-central1"; // Imagen requires a regional endpoint
-const MODEL = "imagen-3.0-generate-002";
+const MODEL = "nano-banana-pro-preview";
 
 function getAuth(): GoogleAuth {
-  // On Vercel: parse credentials from env var
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
     return new GoogleAuth({
       credentials,
-      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      scopes: ["https://www.googleapis.com/auth/generative-language"],
     });
   }
-  // Locally: use GOOGLE_APPLICATION_CREDENTIALS file
   return new GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    scopes: ["https://www.googleapis.com/auth/generative-language"],
   });
 }
 
 export async function POST(req: NextRequest) {
-  console.log("[generate] v2 — direct REST API, no @google/genai SDK");
-
-  if (!process.env.GOOGLE_CLOUD_PROJECT) {
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     return NextResponse.json(
-      { error: "Server misconfigured: missing GOOGLE_CLOUD_PROJECT" },
+      { error: "Server misconfigured: missing credentials" },
       { status: 500 }
     );
   }
@@ -50,10 +44,22 @@ export async function POST(req: NextRequest) {
   try {
     const auth = getAuth();
     const client = await auth.getClient();
-    const tokenResponse = await client.getAccessToken();
-    const token = tokenResponse.token;
+    const token = (await client.getAccessToken()).token;
 
-    const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT()}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
+    // Build parts: text prompt + reference images
+    const parts: Array<Record<string, unknown>> = [{ text: body.prompt }];
+
+    if (body.referenceImages && Array.isArray(body.referenceImages)) {
+      for (const img of body.referenceImages) {
+        if (img.base64 && img.mimeType) {
+          parts.push({
+            inlineData: { mimeType: img.mimeType, data: img.base64 },
+          });
+        }
+      }
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
     const apiResponse = await fetch(url, {
       method: "POST",
@@ -62,51 +68,45 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        instances: [
-          {
-            prompt: body.prompt,
-          },
-        ],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: body.aspectRatio || "16:9",
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
         },
       }),
     });
 
     if (!apiResponse.ok) {
       const errBody = await apiResponse.text();
-      console.error("Vertex AI error:", apiResponse.status, errBody);
+      console.error("Gemini API error:", apiResponse.status, errBody);
       return NextResponse.json(
-        { error: `Vertex AI error (${apiResponse.status}): ${errBody}` },
+        { error: `API error (${apiResponse.status}): ${errBody}` },
         { status: apiResponse.status }
       );
     }
 
     const data = await apiResponse.json();
-    const predictions = data.predictions;
+    const responseParts = data.candidates?.[0]?.content?.parts;
 
-    if (!predictions || predictions.length === 0) {
+    if (!responseParts) {
       return NextResponse.json(
-        { error: "The model did not return an image. It may have been blocked by content policy." },
-        { status: 422 }
+        { error: "No response from the model" },
+        { status: 502 }
       );
     }
 
-    const imageBytes = predictions[0].bytesBase64Encoded;
-    const mimeType = predictions[0].mimeType || "image/png";
-
-    if (!imageBytes) {
-      return NextResponse.json(
-        { error: "The model did not return image data." },
-        { status: 422 }
-      );
+    for (const part of responseParts) {
+      if (part.inlineData) {
+        return NextResponse.json({
+          image: part.inlineData.data,
+          mimeType: part.inlineData.mimeType || "image/png",
+        });
+      }
     }
 
-    return NextResponse.json({
-      image: imageBytes,
-      mimeType,
-    });
+    return NextResponse.json(
+      { error: "The model did not return an image. It may have been blocked by content policy." },
+      { status: 422 }
+    );
   } catch (err: unknown) {
     console.error("Generation error:", err);
     const message = err instanceof Error ? err.message : "Image generation failed";
