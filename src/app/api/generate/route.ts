@@ -1,22 +1,15 @@
 import fs from "fs";
-import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-// Write service account credentials to /tmp for Vercel (no local filesystem access)
-// Also handles case where GOOGLE_APPLICATION_CREDENTIALS points to a missing file
+// This MUST run before @google/genai is imported — the SDK resolves
+// credentials at import time via GOOGLE_APPLICATION_CREDENTIALS.
+// ESM static imports are hoisted, so we use dynamic import() below instead.
 const keyPath = "/tmp/service-account-key.json";
 if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
   if (!fs.existsSync(keyPath)) {
     fs.writeFileSync(keyPath, process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
   }
   process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
-} else if (
-  process.env.GOOGLE_APPLICATION_CREDENTIALS &&
-  !fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)
-) {
-  // GOOGLE_APPLICATION_CREDENTIALS points to a file that doesn't exist (e.g. on Vercel)
-  // Clear it so the SDK doesn't crash on a missing file
-  delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
 }
 
 const RESOLUTION_MAP: Record<string, string> = {
@@ -49,6 +42,9 @@ export async function POST(req: NextRequest) {
   if (!body.prompt || typeof body.prompt !== "string" || !body.prompt.trim()) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
+
+  // Dynamic import — credentials are already written to /tmp above
+  const { GoogleGenAI } = await import("@google/genai");
 
   const ai = new GoogleGenAI({
     vertexai: true,
