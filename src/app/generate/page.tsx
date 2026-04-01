@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import { PromptRow as PromptRowType, ReferenceImage } from "@/types";
 import { useGeneration } from "@/context/GenerationContext";
-import GenerationConfig from "@/components/GenerationConfig";
 import PromptRow from "@/components/PromptRow";
 
 function createEmptyRow(): PromptRowType {
@@ -40,6 +39,7 @@ export default function GeneratePage() {
   const [rows, setRows] = useState<PromptRowType[]>([createEmptyRow()]);
   const [henryActive, setHenryActive] = useState(false);
   const [henryImage, setHenryImage] = useState<ReferenceImage | null>(null);
+  const [henryLoading, setHenryLoading] = useState(false);
 
   const updateRow = useCallback((id: string, updates: Partial<PromptRowType>) => {
     setRows((prev) =>
@@ -66,8 +66,10 @@ export default function GeneratePage() {
     } else {
       let img = henryImage;
       if (!img) {
+        setHenryLoading(true);
         img = await loadHenryPreset();
         setHenryImage(img);
+        setHenryLoading(false);
       }
       setRows((prev) =>
         prev.map((row) => {
@@ -91,7 +93,6 @@ export default function GeneratePage() {
     const validRows = rows.filter((row) => row.prompt.trim());
     if (validRows.length === 0) return;
 
-    // Enqueue all valid rows — the context processor handles them sequentially
     enqueueItems(
       validRows.map((row) => ({
         prompt: row.prompt,
@@ -99,7 +100,6 @@ export default function GeneratePage() {
       }))
     );
 
-    // Mark rows as submitted and reset them for new input
     setRows((prev) =>
       prev.map((row) =>
         row.prompt.trim()
@@ -119,7 +119,7 @@ export default function GeneratePage() {
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-bold">Image Generation</h1>
         <span className="rounded-full bg-neutral-800 px-3 py-1 text-xs text-neutral-400">
-          Model: Nano Banana 2 (gemini-3.1-flash-image-preview)
+          Nano Banana 2 · 16:9 · 2K
         </span>
       </div>
 
@@ -139,20 +139,21 @@ export default function GeneratePage() {
         </div>
       )}
 
-      <GenerationConfig />
-
       {/* Preset buttons */}
       <div className="mb-4 flex items-center gap-2">
         <span className="text-xs text-neutral-500">Presets:</span>
         <button
           onClick={toggleHenryPreset}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            henryActive
-              ? "bg-blue-600 text-white"
+          disabled={henryLoading}
+          className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            henryLoading
+              ? "border border-neutral-700 bg-neutral-900 text-neutral-500 cursor-wait"
+              : henryActive
+              ? "bg-blue-600 text-white hover:bg-blue-500"
               : "border border-neutral-700 bg-neutral-900 text-neutral-300 hover:text-white"
           }`}
         >
-          {henryActive ? "Henry ✓" : "Select Henry"}
+          {henryLoading ? "Loading Henry..." : henryActive ? "Henry ✓" : "Select Henry"}
         </button>
       </div>
 
@@ -181,14 +182,14 @@ export default function GeneratePage() {
             }
             setRows((prev) => [...prev, newRow]);
           }}
-          className="rounded-md border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-300 hover:text-white"
+          className="cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-300 hover:text-white"
         >
           + Add Row
         </button>
         <button
           onClick={handleGenerateAll}
           disabled={!hasValidRows}
-          className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+          className="cursor-pointer rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isProcessing ? "Add to Queue" : "Generate All"}
         </button>

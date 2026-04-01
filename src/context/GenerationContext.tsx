@@ -9,11 +9,11 @@ import {
   useRef,
   ReactNode,
 } from "react";
-import { QueueItem, GenerationConfig, ReferenceImage } from "@/types";
+import { QueueItem, ReferenceImage } from "@/types";
 
 const STORAGE_KEY = "nano-banana-queue";
 const MAX_STORED = 100;
-const DELAY_BETWEEN_GENERATIONS_MS = 3000; // 3s gap between requests
+const DELAY_BETWEEN_GENERATIONS_MS = 3000;
 
 function loadQueue(): QueueItem[] {
   if (typeof window === "undefined") return [];
@@ -21,7 +21,6 @@ function loadQueue(): QueueItem[] {
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
     const items = JSON.parse(data) as QueueItem[];
-    // Reset any "generating" items back to "queued" on reload
     return items.map((item) =>
       item.status === "generating" ? { ...item, status: "queued" as const } : item
     );
@@ -40,8 +39,7 @@ function saveQueue(queue: QueueItem[]) {
 
 async function callGenerateAPI(
   prompt: string,
-  referenceImages: ReferenceImage[],
-  config: GenerationConfig
+  referenceImages: ReferenceImage[]
 ): Promise<{ image: string; mimeType: string }> {
   const res = await fetch("/api/gen", {
     method: "POST",
@@ -52,8 +50,8 @@ async function callGenerateAPI(
         base64: img.base64,
         mimeType: img.mimeType,
       })),
-      aspectRatio: config.aspectRatio,
-      resolution: config.resolution,
+      aspectRatio: "16:9",
+      resolution: "2K",
     }),
   });
 
@@ -67,10 +65,7 @@ async function callGenerateAPI(
 
 interface GenerationContextType {
   queue: QueueItem[];
-  config: GenerationConfig;
-  setConfig: (config: GenerationConfig) => void;
   enqueueItems: (items: Array<{ prompt: string; referenceImages: ReferenceImage[] }>) => void;
-  updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
   isProcessing: boolean;
 }
 
@@ -79,12 +74,10 @@ const GenerationContext = createContext<GenerationContextType | null>(null);
 export function GenerationProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [config, setConfig] = useState<GenerationConfig>({
-    aspectRatio: "16:9",
-    resolution: "2K",
-  });
   const processingRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Counter that increments to trigger the processor effect after each completion
+  const [tick, setTick] = useState(0);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -97,12 +90,6 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
     if (loaded) saveQueue(queue);
   }, [queue, loaded]);
 
-  const updateQueueItem = useCallback((id: string, updates: Partial<QueueItem>) => {
-    setQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
-    );
-  }, []);
-
   const enqueueItems = useCallback(
     (items: Array<{ prompt: string; referenceImages: ReferenceImage[] }>) => {
       const newItems: QueueItem[] = items.map((item) => ({
@@ -111,39 +98,36 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
         referenceImages: item.referenceImages,
         status: "queued" as const,
         timestamp: Date.now(),
-        config: { ...config },
+        config: { aspectRatio: "16:9" as const, resolution: "2K" as const },
       }));
       setQueue((prev) => [...newItems, ...prev]);
     },
-    [config]
+    []
   );
 
-  // Queue processor — runs in the context, survives page navigation
+  // Queue processor — picks up one item at a time
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || processingRef.current) return;
 
-    const processQueue = async () => {
-      if (processingRef.current) return;
+    const nextItem = queue.find((item) => item.status === "queued");
+    if (!nextItem) {
+      setIsProcessing(false);
+      return;
+    }
 
-      const nextItem = queue.find((item) => item.status === "queued");
-      if (!nextItem) return;
+    processingRef.current = true;
+    setIsProcessing(true);
 
-      processingRef.current = true;
-      setIsProcessing(true);
+    // Mark as generating
+    setQueue((prev) =>
+      prev.map((item) =>
+        item.id === nextItem.id ? { ...item, status: "generating" as const } : item
+      )
+    );
 
-      // Mark as generating
-      setQueue((prev) =>
-        prev.map((item) =>
-          item.id === nextItem.id ? { ...item, status: "generating" as const } : item
-        )
-      );
-
+    (async () => {
       try {
-        const result = await callGenerateAPI(
-          nextItem.prompt,
-          nextItem.referenceImages,
-          nextItem.config
-        );
+        const result = await callGenerateAPI(nextItem.prompt, nextItem.referenceImages);
         setQueue((prev) =>
           prev.map((item) =>
             item.id === nextItem.id
@@ -167,21 +151,16 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      // Wait before processing next to respect rate limits
+      // Wait before allowing next item
       await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_GENERATIONS_MS));
       processingRef.current = false;
-
-      // Check if there are more queued items
-      setIsProcessing(false);
-    };
-
-    processQueue();
-  }, [queue, loaded]);
+      // Bump tick to re-trigger this effect for the next queued item
+      setTick((t) => t + 1);
+    })();
+  }, [queue, loaded, tick]);
 
   return (
-    <GenerationContext.Provider
-      value={{ queue, config, setConfig, enqueueItems, updateQueueItem, isProcessing }}
-    >
+    <GenerationContext.Provider value={{ queue, enqueueItems, isProcessing }}>
       {children}
     </GenerationContext.Provider>
   );
