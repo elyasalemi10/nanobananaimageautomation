@@ -2,14 +2,21 @@ import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-// Vercel deployment: write service account key from env var to /tmp before anything else
+// Write service account credentials to /tmp for Vercel (no local filesystem access)
+// Also handles case where GOOGLE_APPLICATION_CREDENTIALS points to a missing file
+const keyPath = "/tmp/service-account-key.json";
 if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-  const keyPath = "/tmp/service-account-key.json";
   if (!fs.existsSync(keyPath)) {
     fs.writeFileSync(keyPath, process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
   }
-  // Always override — the local ./service-account-key.json path doesn't exist on Vercel
   process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+} else if (
+  process.env.GOOGLE_APPLICATION_CREDENTIALS &&
+  !fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)
+) {
+  // GOOGLE_APPLICATION_CREDENTIALS points to a file that doesn't exist (e.g. on Vercel)
+  // Clear it so the SDK doesn't crash on a missing file
+  delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
 }
 
 const RESOLUTION_MAP: Record<string, string> = {
