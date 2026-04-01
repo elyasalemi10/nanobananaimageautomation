@@ -102,7 +102,7 @@ export default function GeneratePage() {
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-bold">Image Generation</h1>
         <span className="rounded-full bg-neutral-800 px-3 py-1 text-xs text-neutral-400">
-          Model: Imagen 3 (imagen-3.0-generate-002) via Vertex AI
+          Model: Nano Banana 2 (imagen-3.0-generate-002) via Vertex AI
         </span>
       </div>
 
