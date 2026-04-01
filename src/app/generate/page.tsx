@@ -36,9 +36,8 @@ async function loadHenryPreset(): Promise<ReferenceImage> {
 }
 
 export default function GeneratePage() {
-  const { config, addToQueue, updateQueueItem, generateImage } = useGeneration();
+  const { enqueueItems, queue, isProcessing } = useGeneration();
   const [rows, setRows] = useState<PromptRowType[]>([createEmptyRow()]);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [henryActive, setHenryActive] = useState(false);
   const [henryImage, setHenryImage] = useState<ReferenceImage | null>(null);
 
@@ -57,7 +56,6 @@ export default function GeneratePage() {
 
   const toggleHenryPreset = useCallback(async () => {
     if (henryActive) {
-      // Remove henry from all rows
       setRows((prev) =>
         prev.map((row) => ({
           ...row,
@@ -66,7 +64,6 @@ export default function GeneratePage() {
       );
       setHenryActive(false);
     } else {
-      // Load henry and add to all rows
       let img = henryImage;
       if (!img) {
         img = await loadHenryPreset();
@@ -83,42 +80,6 @@ export default function GeneratePage() {
     }
   }, [henryActive, henryImage]);
 
-  const generateRow = useCallback(
-    async (row: PromptRowType) => {
-      const queueId = row.id;
-
-      addToQueue({
-        id: queueId,
-        prompt: row.prompt,
-        referenceImages: row.referenceImages,
-        status: "generating",
-        timestamp: Date.now(),
-        config: { ...config },
-      });
-
-      updateRow(row.id, { status: "generating", error: undefined });
-
-      try {
-        const result = await generateImage(row.prompt, row.referenceImages, config);
-        updateRow(row.id, {
-          status: "completed",
-          resultImage: result.image,
-          resultMimeType: result.mimeType,
-        });
-        updateQueueItem(queueId, {
-          status: "completed",
-          resultImage: result.image,
-          resultMimeType: result.mimeType,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Generation failed";
-        updateRow(row.id, { status: "failed", error: message });
-        updateQueueItem(queueId, { status: "failed", error: message });
-      }
-    },
-    [config, addToQueue, updateRow, updateQueueItem, generateImage]
-  );
-
   const handleRetry = useCallback(
     (id: string) => {
       updateRow(id, { status: "idle", resultImage: undefined, resultMimeType: undefined, error: undefined });
@@ -126,20 +87,31 @@ export default function GeneratePage() {
     [updateRow]
   );
 
-  const handleGenerateAll = useCallback(async () => {
-    const validRows = rows.filter((row) => row.prompt.trim() && row.status !== "generating");
+  const handleGenerateAll = useCallback(() => {
+    const validRows = rows.filter((row) => row.prompt.trim());
     if (validRows.length === 0) return;
 
-    setIsGenerating(true);
-    // Generate sequentially to respect rate limits
-    for (const row of validRows) {
-      await generateRow(row);
-    }
-    setIsGenerating(false);
-  }, [rows, generateRow]);
+    // Enqueue all valid rows — the context processor handles them sequentially
+    enqueueItems(
+      validRows.map((row) => ({
+        prompt: row.prompt,
+        referenceImages: row.referenceImages,
+      }))
+    );
 
+    // Mark rows as submitted and reset them for new input
+    setRows((prev) =>
+      prev.map((row) =>
+        row.prompt.trim()
+          ? { ...row, status: "generating" as const }
+          : row
+      )
+    );
+  }, [rows, enqueueItems]);
+
+  const queuedCount = queue.filter((item) => item.status === "queued").length;
+  const generatingCount = queue.filter((item) => item.status === "generating").length;
   const hasValidRows = rows.some((row) => row.prompt.trim());
-  const hasGenerating = rows.some((row) => row.status === "generating");
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -150,6 +122,22 @@ export default function GeneratePage() {
           Model: Nano Banana 2 (gemini-3.1-flash-image-preview)
         </span>
       </div>
+
+      {/* Processing status */}
+      {(queuedCount > 0 || generatingCount > 0) && (
+        <div className="mb-4 flex items-center gap-2 rounded-md bg-yellow-900/20 border border-yellow-800/40 px-3 py-2 text-xs text-yellow-400">
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>
+            {generatingCount > 0 && "1 generating"}
+            {generatingCount > 0 && queuedCount > 0 && ", "}
+            {queuedCount > 0 && `${queuedCount} queued`}
+            {" — processing continues even if you switch pages"}
+          </span>
+        </div>
+      )}
 
       <GenerationConfig />
 
@@ -188,7 +176,6 @@ export default function GeneratePage() {
         <button
           onClick={() => {
             const newRow = createEmptyRow();
-            // If henry is active, add it to the new row
             if (henryActive && henryImage) {
               newRow.referenceImages = [henryImage];
             }
@@ -200,10 +187,10 @@ export default function GeneratePage() {
         </button>
         <button
           onClick={handleGenerateAll}
-          disabled={!hasValidRows || hasGenerating || isGenerating}
+          disabled={!hasValidRows}
           className="rounded-md bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
         >
-          {isGenerating ? "Generating..." : "Generate All"}
+          {isProcessing ? "Add to Queue" : "Generate All"}
         </button>
       </div>
     </div>

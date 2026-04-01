@@ -25,7 +25,7 @@ export interface QueueItem {
   id: string;
   prompt: string;
   referenceImages: ReferenceImage[];
-  status: "pending" | "generating" | "completed" | "failed";
+  status: "queued" | "generating" | "completed" | "failed";
   resultImage?: string;
   resultMimeType?: string;
   error?: string;

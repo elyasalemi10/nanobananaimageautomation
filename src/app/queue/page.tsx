@@ -8,9 +8,21 @@ export default function QueuePage() {
   const { queue } = useGeneration();
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
+  const queuedCount = queue.filter((item) => item.status === "queued").length;
+  const generatingCount = queue.filter((item) => item.status === "generating").length;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
-      <h1 className="mb-6 text-xl font-bold">Generation Queue</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-bold">Generation Queue</h1>
+        {(queuedCount > 0 || generatingCount > 0) && (
+          <span className="text-xs text-yellow-400">
+            {generatingCount > 0 && "1 generating"}
+            {generatingCount > 0 && queuedCount > 0 && " · "}
+            {queuedCount > 0 && `${queuedCount} queued`}
+          </span>
+        )}
+      </div>
 
       {queue.length === 0 ? (
         <p className="text-neutral-500">
@@ -54,8 +66,17 @@ export default function QueuePage() {
                 )}
               </div>
 
+              {item.status === "queued" && (
+                <div className="mt-3 flex items-center gap-2 text-neutral-500">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs">Waiting in queue...</span>
+                </div>
+              )}
+
               {item.status === "generating" && (
-                <div className="mt-3 flex items-center gap-2 text-neutral-400">
+                <div className="mt-3 flex items-center gap-2 text-yellow-400">
                   <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -88,14 +109,14 @@ export default function QueuePage() {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: "bg-neutral-800 text-neutral-400",
+    queued: "bg-neutral-800 text-neutral-400",
     generating: "bg-yellow-900/50 text-yellow-400",
     completed: "bg-green-900/50 text-green-400",
     failed: "bg-red-900/50 text-red-400",
   };
 
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || styles.pending}`}>
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[status] || styles.queued}`}>
       {status}
     </span>
   );
