@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const ai = new GoogleGenAI({
     vertexai: true,
     project: process.env.GOOGLE_CLOUD_PROJECT,
-    location: process.env.GOOGLE_CLOUD_LOCATION || "global",
+    location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
     googleAuthOptions: { credentials },
   });
 
@@ -93,8 +93,9 @@ export async function POST(req: NextRequest) {
       { status: 422 }
     );
   } catch (err: unknown) {
-    const error = err as { status?: number; message?: string };
-    console.error("Gemini API error:", error);
+    console.error("Gemini API error:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
+    const error = err as { status?: number; message?: string; details?: unknown };
+    const message = error.message || "Image generation failed";
 
     if (error.status === 429) {
       return NextResponse.json(
@@ -110,8 +111,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: error.message || "Image generation failed" },
-      { status: 500 }
+      { error: message, details: error.details },
+      { status: error.status || 500 }
     );
   }
 }
