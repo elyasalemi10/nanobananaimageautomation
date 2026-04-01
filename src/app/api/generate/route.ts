@@ -21,6 +21,8 @@ function getAuth(): GoogleAuth {
 }
 
 export async function POST(req: NextRequest) {
+  console.log("[generate] v2 — direct REST API, no @google/genai SDK");
+
   if (!process.env.GOOGLE_CLOUD_PROJECT) {
     return NextResponse.json(
       { error: "Server misconfigured: missing GOOGLE_CLOUD_PROJECT" },
