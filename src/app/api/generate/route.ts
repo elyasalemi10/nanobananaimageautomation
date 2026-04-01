@@ -3,9 +3,13 @@ import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
 // Vercel deployment: write service account key from env var to /tmp before anything else
-if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && !fs.existsSync("/tmp/service-account-key.json")) {
-  fs.writeFileSync("/tmp/service-account-key.json", process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = "/tmp/service-account-key.json";
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+  const keyPath = "/tmp/service-account-key.json";
+  if (!fs.existsSync(keyPath)) {
+    fs.writeFileSync(keyPath, process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+  }
+  // Always override — the local ./service-account-key.json path doesn't exist on Vercel
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
 }
 
 const RESOLUTION_MAP: Record<string, string> = {
