@@ -41,7 +41,7 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
       referenceImages: ReferenceImage[],
       cfg: GenerationConfig
     ): Promise<{ image: string; mimeType: string }> => {
-      const res = await fetch("/api/generate", {
+      const res = await fetch("/api/gen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
