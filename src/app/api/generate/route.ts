@@ -1,11 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-const RESOLUTION_MAP: Record<string, string> = {
-  "1K": "1024x1024",
-  "2K": "2048x2048",
-  "4K": "4096x4096",
-};
+const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
 
 export async function POST(req: NextRequest) {
   if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
@@ -69,7 +65,7 @@ export async function POST(req: NextRequest) {
         responseModalities: ["TEXT", "IMAGE"],
         imageConfig: {
           aspectRatio: body.aspectRatio || "16:9",
-          imageSize: RESOLUTION_MAP[body.resolution || "2K"] || "2048x2048",
+          imageSize: VALID_IMAGE_SIZES.has(body.resolution || "2K") ? (body.resolution || "2K") : "2K",
         },
       },
     });
