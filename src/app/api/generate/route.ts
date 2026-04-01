@@ -1,6 +1,12 @@
+import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
-import { writeFileSync, existsSync } from "fs";
 import { NextRequest, NextResponse } from "next/server";
+
+// Vercel deployment: write service account key from env var to /tmp before anything else
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && !fs.existsSync("/tmp/service-account-key.json")) {
+  fs.writeFileSync("/tmp/service-account-key.json", process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = "/tmp/service-account-key.json";
+}
 
 const RESOLUTION_MAP: Record<string, string> = {
   "1K": "1024x1024",
@@ -9,15 +15,6 @@ const RESOLUTION_MAP: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  // Vercel deployment: write service account key from env var to temp file
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    const keyPath = "/tmp/service-account-key.json";
-    if (!existsSync(keyPath)) {
-      writeFileSync(keyPath, process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-    }
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
-  }
-
   if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     return NextResponse.json(
       { error: "Server misconfigured: missing Google Cloud credentials" },
