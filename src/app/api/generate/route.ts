@@ -1,12 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-const VALID_IMAGE_SIZES = new Set(["1K", "2K", "4K"]);
-
 export async function POST(req: NextRequest) {
-  if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+  if (!process.env.GOOGLE_CLOUD_PROJECT) {
     return NextResponse.json(
-      { error: "Server misconfigured: missing GOOGLE_CLOUD_PROJECT or GOOGLE_SERVICE_ACCOUNT_KEY" },
+      { error: "Server misconfigured: missing GOOGLE_CLOUD_PROJECT" },
       { status: 500 }
     );
   }
@@ -28,66 +26,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
-  // Pass credentials directly — no filesystem, no GOOGLE_APPLICATION_CREDENTIALS
-  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-
-  const ai = new GoogleGenAI({
+  // Build GoogleGenAI options
+  const aiOptions: Record<string, unknown> = {
     vertexai: true,
     project: process.env.GOOGLE_CLOUD_PROJECT,
     location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-    googleAuthOptions: { credentials },
-  });
+  };
 
-  // Build contents array
-  const contents: Array<
-    | { text: string }
-    | { inlineData: { mimeType: string; data: string } }
-  > = [{ text: body.prompt }];
-
-  if (body.referenceImages && Array.isArray(body.referenceImages)) {
-    for (const img of body.referenceImages) {
-      if (img.base64 && img.mimeType) {
-        contents.push({
-          inlineData: {
-            mimeType: img.mimeType,
-            data: img.base64,
-          },
-        });
-      }
-    }
+  // On Vercel: pass credentials from env var directly
+  // Locally: SDK reads GOOGLE_APPLICATION_CREDENTIALS automatically
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    aiOptions.googleAuthOptions = { credentials };
   }
 
+  const ai = new GoogleGenAI(aiOptions);
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-preview-image-generation",
-      contents,
+    const response = await ai.models.generateImages({
+      model: "imagen-3.0-generate-002",
+      prompt: body.prompt,
       config: {
-        responseModalities: ["TEXT", "IMAGE"],
+        numberOfImages: 1,
+        aspectRatio: body.aspectRatio || "16:9",
       },
     });
 
-    // Find the image part in the response
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (!parts) {
+    const generated = response.generatedImages?.[0];
+    if (!generated?.image?.imageBytes) {
+      const reason = generated?.raiFilteredReason;
       return NextResponse.json(
-        { error: "No response from the model" },
-        { status: 502 }
+        { error: reason || "The model did not return an image. It may have been blocked by content policy." },
+        { status: 422 }
       );
     }
 
-    for (const part of parts) {
-      if (part.inlineData) {
-        return NextResponse.json({
-          image: part.inlineData.data,
-          mimeType: part.inlineData.mimeType || "image/png",
-        });
-      }
-    }
-
-    return NextResponse.json(
-      { error: "The model did not return an image. It may have been blocked by content policy." },
-      { status: 422 }
-    );
+    return NextResponse.json({
+      image: generated.image.imageBytes,
+      mimeType: generated.image.mimeType || "image/png",
+    });
   } catch (err: unknown) {
     console.error("Gemini API error:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
     const error = err as { status?: number; message?: string; details?: unknown };
