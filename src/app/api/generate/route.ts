@@ -1,5 +1,24 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleAuth } from "google-auth-library";
 import { NextRequest, NextResponse } from "next/server";
+
+const PROJECT = () => process.env.GOOGLE_CLOUD_PROJECT!;
+const LOCATION = "us-central1"; // Imagen requires a regional endpoint
+const MODEL = "imagen-3.0-generate-002";
+
+function getAuth(): GoogleAuth {
+  // On Vercel: parse credentials from env var
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    return new GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+    });
+  }
+  // Locally: use GOOGLE_APPLICATION_CREDENTIALS file
+  return new GoogleAuth({
+    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+  });
+}
 
 export async function POST(req: NextRequest) {
   if (!process.env.GOOGLE_CLOUD_PROJECT) {
@@ -26,66 +45,69 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
-  // Build GoogleGenAI options
-  const aiOptions: Record<string, unknown> = {
-    vertexai: true,
-    project: process.env.GOOGLE_CLOUD_PROJECT,
-    location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
-  };
-
-  // On Vercel: pass credentials from env var directly
-  // Locally: SDK reads GOOGLE_APPLICATION_CREDENTIALS automatically
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-    aiOptions.googleAuthOptions = { credentials };
-  }
-
-  const ai = new GoogleGenAI(aiOptions);
-
   try {
-    const response = await ai.models.generateImages({
-      model: "imagen-3.0-generate-002",
-      prompt: body.prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: body.aspectRatio || "16:9",
+    const auth = getAuth();
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    const token = tokenResponse.token;
+
+    const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT()}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
+
+    const apiResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        instances: [
+          {
+            prompt: body.prompt,
+          },
+        ],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio: body.aspectRatio || "16:9",
+        },
+      }),
     });
 
-    const generated = response.generatedImages?.[0];
-    if (!generated?.image?.imageBytes) {
-      const reason = generated?.raiFilteredReason;
+    if (!apiResponse.ok) {
+      const errBody = await apiResponse.text();
+      console.error("Vertex AI error:", apiResponse.status, errBody);
       return NextResponse.json(
-        { error: reason || "The model did not return an image. It may have been blocked by content policy." },
+        { error: `Vertex AI error (${apiResponse.status}): ${errBody}` },
+        { status: apiResponse.status }
+      );
+    }
+
+    const data = await apiResponse.json();
+    const predictions = data.predictions;
+
+    if (!predictions || predictions.length === 0) {
+      return NextResponse.json(
+        { error: "The model did not return an image. It may have been blocked by content policy." },
+        { status: 422 }
+      );
+    }
+
+    const imageBytes = predictions[0].bytesBase64Encoded;
+    const mimeType = predictions[0].mimeType || "image/png";
+
+    if (!imageBytes) {
+      return NextResponse.json(
+        { error: "The model did not return image data." },
         { status: 422 }
       );
     }
 
     return NextResponse.json({
-      image: generated.image.imageBytes,
-      mimeType: generated.image.mimeType || "image/png",
+      image: imageBytes,
+      mimeType,
     });
   } catch (err: unknown) {
-    console.error("Gemini API error:", JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
-    const error = err as { status?: number; message?: string; details?: unknown };
-    const message = error.message || "Image generation failed";
-
-    if (error.status === 429) {
-      return NextResponse.json(
-        { error: "Rate limit exceeded. Please wait a moment and try again." },
-        { status: 429 }
-      );
-    }
-    if (error.status === 401 || error.status === 403) {
-      return NextResponse.json(
-        { error: "Invalid or unauthorized API key." },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: message, details: error.details },
-      { status: error.status || 500 }
-    );
+    console.error("Generation error:", err);
+    const message = err instanceof Error ? err.message : "Image generation failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
