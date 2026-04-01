@@ -102,7 +102,7 @@ export default function GeneratePage() {
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-bold">Image Generation</h1>
         <span className="rounded-full bg-neutral-800 px-3 py-1 text-xs text-neutral-400">
-          Model: Nano Banana Pro (nano-banana-pro-preview)
+          Model: Nano Banana 2 (gemini-3.1-flash-image-preview)
         </span>
       </div>
 

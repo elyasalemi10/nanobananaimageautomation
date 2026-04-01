@@ -1,7 +1,7 @@
 import { GoogleAuth } from "google-auth-library";
 import { NextRequest, NextResponse } from "next/server";
 
-const MODEL = "nano-banana-pro-preview";
+const MODEL = "gemini-3.1-flash-image-preview";
 
 function getAuth(): GoogleAuth {
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
