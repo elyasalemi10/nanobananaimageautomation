@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useGeneration } from "@/context/GenerationContext";
+import ImagePreview from "@/components/ImagePreview";
 
 export default function QueuePage() {
   const { queue } = useGeneration();
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -20,59 +23,64 @@ export default function QueuePage() {
               key={item.id}
               className="rounded-lg border border-neutral-800 bg-neutral-950 p-4"
             >
-              <div className="flex gap-4">
-                {/* Info */}
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={item.status} />
-                    <span className="text-xs text-neutral-500">
-                      {new Date(item.timestamp).toLocaleTimeString()}
-                    </span>
-                    <span className="text-xs text-neutral-600">
-                      {item.config.aspectRatio} &middot; {item.config.resolution}
-                    </span>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={item.status} />
+                  <span className="text-xs text-neutral-500">
+                    {new Date(item.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span className="text-xs text-neutral-600">
+                    {item.config.aspectRatio} &middot; {item.config.resolution}
+                  </span>
+                </div>
+                <p className="text-sm text-neutral-300">{item.prompt}</p>
+
+                {item.referenceImages.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {item.referenceImages.map((img) => (
+                      <img
+                        key={img.id}
+                        src={`data:${img.mimeType};base64,${img.base64}`}
+                        alt={img.name}
+                        className="h-10 w-10 cursor-pointer rounded border border-neutral-700 object-cover"
+                        onClick={() => setPreviewSrc(`data:${img.mimeType};base64,${img.base64}`)}
+                      />
+                    ))}
                   </div>
-                  <p className="text-sm text-neutral-300">{item.prompt}</p>
+                )}
 
-                  {/* Reference image thumbnails */}
-                  {item.referenceImages.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.referenceImages.map((img) => (
-                        <img
-                          key={img.id}
-                          src={`data:${img.mimeType};base64,${img.base64}`}
-                          alt={img.name}
-                          className="h-10 w-10 rounded border border-neutral-700 object-cover"
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {item.error && (
-                    <p className="text-xs text-red-400">{item.error}</p>
-                  )}
-                </div>
-
-                {/* Result image */}
-                <div className="flex w-40 items-center justify-center">
-                  {item.status === "generating" && (
-                    <svg className="h-8 w-8 animate-spin text-neutral-400" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  )}
-                  {item.status === "completed" && item.resultImage && (
-                    <img
-                      src={`data:${item.resultMimeType};base64,${item.resultImage}`}
-                      alt="Generated"
-                      className="max-h-32 rounded-md border border-neutral-700"
-                    />
-                  )}
-                </div>
+                {item.error && (
+                  <p className="text-xs text-red-400">{item.error}</p>
+                )}
               </div>
+
+              {item.status === "generating" && (
+                <div className="mt-3 flex items-center gap-2 text-neutral-400">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span className="text-xs">Generating...</span>
+                </div>
+              )}
+
+              {item.status === "completed" && item.resultImage && (
+                <div className="mt-3 border-t border-neutral-800 pt-3">
+                  <img
+                    src={`data:${item.resultMimeType};base64,${item.resultImage}`}
+                    alt="Generated"
+                    className="w-full cursor-pointer rounded-md border border-neutral-700"
+                    onClick={() => setPreviewSrc(`data:${item.resultMimeType};base64,${item.resultImage}`)}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
+      )}
+
+      {previewSrc && (
+        <ImagePreview src={previewSrc} onClose={() => setPreviewSrc(null)} />
       )}
     </div>
   );

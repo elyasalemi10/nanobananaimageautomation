@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { PromptRow as PromptRowType } from "@/types";
+import { PromptRow as PromptRowType, ReferenceImage } from "@/types";
 import { useGeneration } from "@/context/GenerationContext";
 import GenerationConfig from "@/components/GenerationConfig";
 import PromptRow from "@/components/PromptRow";
@@ -15,10 +15,32 @@ function createEmptyRow(): PromptRowType {
   };
 }
 
+async function loadHenryPreset(): Promise<ReferenceImage> {
+  const res = await fetch("/henry.PNG");
+  const blob = await res.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      resolve({
+        id: "henry-preset",
+        base64,
+        mimeType: "image/png",
+        name: "henry.PNG",
+        size: blob.size,
+      });
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function GeneratePage() {
   const { config, addToQueue, updateQueueItem, generateImage } = useGeneration();
   const [rows, setRows] = useState<PromptRowType[]>([createEmptyRow()]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [henryActive, setHenryActive] = useState(false);
+  const [henryImage, setHenryImage] = useState<ReferenceImage | null>(null);
 
   const updateRow = useCallback((id: string, updates: Partial<PromptRowType>) => {
     setRows((prev) =>
@@ -33,11 +55,38 @@ export default function GeneratePage() {
     });
   }, []);
 
+  const toggleHenryPreset = useCallback(async () => {
+    if (henryActive) {
+      // Remove henry from all rows
+      setRows((prev) =>
+        prev.map((row) => ({
+          ...row,
+          referenceImages: row.referenceImages.filter((img) => img.id !== "henry-preset"),
+        }))
+      );
+      setHenryActive(false);
+    } else {
+      // Load henry and add to all rows
+      let img = henryImage;
+      if (!img) {
+        img = await loadHenryPreset();
+        setHenryImage(img);
+      }
+      setRows((prev) =>
+        prev.map((row) => {
+          const hasHenry = row.referenceImages.some((r) => r.id === "henry-preset");
+          if (hasHenry) return row;
+          return { ...row, referenceImages: [...row.referenceImages, img] };
+        })
+      );
+      setHenryActive(true);
+    }
+  }, [henryActive, henryImage]);
+
   const generateRow = useCallback(
     async (row: PromptRowType) => {
       const queueId = row.id;
 
-      // Add to queue
       addToQueue({
         id: queueId,
         prompt: row.prompt,
@@ -47,7 +96,6 @@ export default function GeneratePage() {
         config: { ...config },
       });
 
-      // Update row status
       updateRow(row.id, { status: "generating", error: undefined });
 
       try {
@@ -73,12 +121,9 @@ export default function GeneratePage() {
 
   const handleRetry = useCallback(
     (id: string) => {
-      const row = rows.find((r) => r.id === id);
-      if (!row) return;
-      // Reset to idle so user can edit, then they can hit Generate All or we auto-submit
       updateRow(id, { status: "idle", resultImage: undefined, resultMimeType: undefined, error: undefined });
     },
-    [rows, updateRow]
+    [updateRow]
   );
 
   const handleGenerateAll = useCallback(async () => {
@@ -86,10 +131,7 @@ export default function GeneratePage() {
     if (validRows.length === 0) return;
 
     setIsGenerating(true);
-
-    // Fire all rows concurrently
     await Promise.allSettled(validRows.map((row) => generateRow(row)));
-
     setIsGenerating(false);
   }, [rows, generateRow]);
 
@@ -107,6 +149,21 @@ export default function GeneratePage() {
       </div>
 
       <GenerationConfig />
+
+      {/* Preset buttons */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-xs text-neutral-500">Presets:</span>
+        <button
+          onClick={toggleHenryPreset}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            henryActive
+              ? "bg-blue-600 text-white"
+              : "border border-neutral-700 bg-neutral-900 text-neutral-300 hover:text-white"
+          }`}
+        >
+          {henryActive ? "Henry ✓" : "Select Henry"}
+        </button>
+      </div>
 
       {/* Rows */}
       <div className="space-y-4">
@@ -126,7 +183,14 @@ export default function GeneratePage() {
       {/* Actions */}
       <div className="mt-4 flex gap-3">
         <button
-          onClick={() => setRows((prev) => [...prev, createEmptyRow()])}
+          onClick={() => {
+            const newRow = createEmptyRow();
+            // If henry is active, add it to the new row
+            if (henryActive && henryImage) {
+              newRow.referenceImages = [henryImage];
+            }
+            setRows((prev) => [...prev, newRow]);
+          }}
           className="rounded-md border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-300 hover:text-white"
         >
           + Add Row
