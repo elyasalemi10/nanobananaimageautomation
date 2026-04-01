@@ -86,6 +86,9 @@ export async function POST(req: NextRequest) {
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: {
+        aspectRatio: "16:9",
+      },
     },
   });
 
