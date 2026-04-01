@@ -131,7 +131,10 @@ export default function GeneratePage() {
     if (validRows.length === 0) return;
 
     setIsGenerating(true);
-    await Promise.allSettled(validRows.map((row) => generateRow(row)));
+    // Generate sequentially to respect rate limits
+    for (const row of validRows) {
+      await generateRow(row);
+    }
     setIsGenerating(false);
   }, [rows, generateRow]);
 
