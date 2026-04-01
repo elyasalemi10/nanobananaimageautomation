@@ -1,16 +1,5 @@
-import fs from "fs";
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
-
-// This MUST run before @google/genai is imported — the SDK resolves
-// credentials at import time via GOOGLE_APPLICATION_CREDENTIALS.
-// ESM static imports are hoisted, so we use dynamic import() below instead.
-const keyPath = "/tmp/service-account-key.json";
-if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-  if (!fs.existsSync(keyPath)) {
-    fs.writeFileSync(keyPath, process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-  }
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
-}
 
 const RESOLUTION_MAP: Record<string, string> = {
   "1K": "1024x1024",
@@ -19,9 +8,9 @@ const RESOLUTION_MAP: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  if (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     return NextResponse.json(
-      { error: "Server misconfigured: missing Google Cloud credentials" },
+      { error: "Server misconfigured: missing GOOGLE_CLOUD_PROJECT or GOOGLE_SERVICE_ACCOUNT_KEY" },
       { status: 500 }
     );
   }
@@ -43,13 +32,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
-  // Dynamic import — credentials are already written to /tmp above
-  const { GoogleGenAI } = await import("@google/genai");
+  // Pass credentials directly — no filesystem, no GOOGLE_APPLICATION_CREDENTIALS
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
 
   const ai = new GoogleGenAI({
     vertexai: true,
     project: process.env.GOOGLE_CLOUD_PROJECT,
     location: process.env.GOOGLE_CLOUD_LOCATION || "global",
+    googleAuthOptions: { credentials },
   });
 
   // Build contents array
