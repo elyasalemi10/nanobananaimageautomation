@@ -1,59 +1,16 @@
 // Ported from https://github.com/dinoBOLT/Gemini-Watermark-Remover
 
-const MODEL_URL =
-  "https://drive.google.com/uc?export=download&id=16cRZWEQyJFecg77ebUBXjFxAik0iFU_C";
-const MODEL_CACHE_KEY = "lama-model-v1";
+// Served from /public/models/ (downloaded at build time)
+const MODEL_URL = "/models/lama_fp32.onnx";
 const MODEL_INPUT_SIZE = 512;
 const WATERMARK_HEIGHT_RATIO = 0.15;
 const WATERMARK_WIDTH_RATIO = 0.15;
 
-// Cache model in IndexedDB
-async function getCachedModel(): Promise<ArrayBuffer | null> {
-  return new Promise((resolve) => {
-    const req = indexedDB.open("watermark-remover", 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore("models");
-    };
-    req.onsuccess = () => {
-      const tx = req.result.transaction("models", "readonly");
-      const store = tx.objectStore("models");
-      const get = store.get(MODEL_CACHE_KEY);
-      get.onsuccess = () => resolve(get.result || null);
-      get.onerror = () => resolve(null);
-    };
-    req.onerror = () => resolve(null);
-  });
-}
-
-async function cacheModel(buffer: ArrayBuffer): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.open("watermark-remover", 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore("models");
-    };
-    req.onsuccess = () => {
-      const tx = req.result.transaction("models", "readwrite");
-      const store = tx.objectStore("models");
-      store.put(buffer, MODEL_CACHE_KEY);
-      tx.oncomplete = () => resolve();
-    };
-    req.onerror = () => resolve();
-  });
-}
-
 export async function loadModel(
   onProgress?: (pct: number) => void
 ): Promise<ArrayBuffer> {
-  const cached = await getCachedModel();
-  if (cached) {
-    onProgress?.(100);
-    return cached;
-  }
-
-  // Google Drive large file download needs confirmation
-  // Use the direct download URL
   const res = await fetch(MODEL_URL);
-  if (!res.ok) throw new Error("Failed to download model");
+  if (!res.ok) throw new Error("Failed to load model");
 
   const contentLength = Number(res.headers.get("content-length")) || 0;
   const reader = res.body!.getReader();
@@ -77,10 +34,8 @@ export async function loadModel(
     offset += chunk.length;
   }
 
-  const ab = buffer.buffer;
-  await cacheModel(ab);
   onProgress?.(100);
-  return ab;
+  return buffer.buffer;
 }
 
 function calculateWatermarkRegion(width: number, height: number) {
