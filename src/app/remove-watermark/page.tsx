@@ -186,7 +186,7 @@ export default function RemoveWatermarkPage() {
       {modelProgress !== null && modelProgress < 100 && (
         <div className="mb-4 rounded-md bg-neutral-900 border border-neutral-800 p-3">
           <div className="mb-1 text-xs text-neutral-400">
-            Downloading AI model ({modelProgress}%)... This is a one-time ~200MB download.
+            Loading AI model ({modelProgress}%)...
           </div>
           <div className="h-2 rounded-full bg-neutral-800">
             <div
