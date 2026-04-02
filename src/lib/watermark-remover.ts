@@ -255,7 +255,7 @@ export async function removeWatermark(
   // Run ONNX inference
   onStatus?.("Running AI model...");
   const ort = await import("onnxruntime-web");
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/";
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/";
 
   const session = await ort.InferenceSession.create(modelBuffer, {
     executionProviders: ["wasm"],
