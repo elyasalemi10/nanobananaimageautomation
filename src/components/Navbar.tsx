@@ -31,6 +31,16 @@ export default function Navbar() {
           >
             Queue
           </Link>
+          <Link
+            href="/remove-watermark"
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              pathname === "/remove-watermark"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            Remove Watermark
+          </Link>
         </div>
       </div>
     </nav>
