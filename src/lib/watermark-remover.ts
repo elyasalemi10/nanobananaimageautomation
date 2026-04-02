@@ -1,16 +1,48 @@
 // Ported from https://github.com/dinoBOLT/Gemini-Watermark-Remover
 
-// Served from /public/models/ (downloaded at build time)
-const MODEL_URL = "/models/lama_fp32.onnx";
+// Try local first (works in dev), fall back to Google Drive CDN
+const MODEL_URL_LOCAL = "/models/lama_fp32.onnx";
+const MODEL_URL_REMOTE =
+  "https://drive.usercontent.google.com/download?id=16cRZWEQyJFecg77ebUBXjFxAik0iFU_C&export=download&confirm=t";
+const IDB_CACHE_KEY = "lama-model-v1";
 const MODEL_INPUT_SIZE = 512;
 const WATERMARK_HEIGHT_RATIO = 0.15;
 const WATERMARK_WIDTH_RATIO = 0.15;
 
-export async function loadModel(
+// IndexedDB cache for the model
+async function getCachedModel(): Promise<ArrayBuffer | null> {
+  return new Promise((resolve) => {
+    const req = indexedDB.open("watermark-remover", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("models");
+    req.onsuccess = () => {
+      const tx = req.result.transaction("models", "readonly");
+      const get = tx.objectStore("models").get(IDB_CACHE_KEY);
+      get.onsuccess = () => resolve(get.result || null);
+      get.onerror = () => resolve(null);
+    };
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function cacheModel(buffer: ArrayBuffer): Promise<void> {
+  return new Promise((resolve) => {
+    const req = indexedDB.open("watermark-remover", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("models");
+    req.onsuccess = () => {
+      const tx = req.result.transaction("models", "readwrite");
+      tx.objectStore("models").put(buffer, IDB_CACHE_KEY);
+      tx.oncomplete = () => resolve();
+    };
+    req.onerror = () => resolve();
+  });
+}
+
+async function fetchModel(
+  url: string,
   onProgress?: (pct: number) => void
 ): Promise<ArrayBuffer> {
-  const res = await fetch(MODEL_URL);
-  if (!res.ok) throw new Error("Failed to load model");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to load model from ${url}`);
 
   const contentLength = Number(res.headers.get("content-length")) || 0;
   const reader = res.body!.getReader();
@@ -36,6 +68,34 @@ export async function loadModel(
 
   onProgress?.(100);
   return buffer.buffer;
+}
+
+export async function loadModel(
+  onProgress?: (pct: number) => void
+): Promise<ArrayBuffer> {
+  // Check IndexedDB cache first
+  const cached = await getCachedModel();
+  if (cached) {
+    onProgress?.(100);
+    return cached;
+  }
+
+  // Try local server first, fall back to Google Drive
+  let buffer: ArrayBuffer;
+  try {
+    const check = await fetch(MODEL_URL_LOCAL, { method: "HEAD" });
+    if (check.ok) {
+      buffer = await fetchModel(MODEL_URL_LOCAL, onProgress);
+    } else {
+      throw new Error("Local not available");
+    }
+  } catch {
+    buffer = await fetchModel(MODEL_URL_REMOTE, onProgress);
+  }
+
+  // Cache in IndexedDB for next time
+  await cacheModel(buffer);
+  return buffer;
 }
 
 function calculateWatermarkRegion(width: number, height: number) {
