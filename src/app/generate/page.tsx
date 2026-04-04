@@ -12,7 +12,7 @@ interface GenerationResult {
   prompt: string;
   image: string;
   mimeType: string;
-  status: "generating" | "done" | "failed";
+  status: "idle" | "generating" | "done" | "failed";
   error?: string;
 }
 
@@ -219,8 +219,8 @@ export default function GeneratePage() {
     }
   }, [prompt, referenceImages, isGenerating]);
 
-  // Batch generate from JSON prompts
-  const handleJsonGenerate = useCallback(async () => {
+  // Parse JSON and populate prompt rows
+  const handleJsonImport = useCallback(() => {
     let prompts: string[];
     try {
       prompts = JSON.parse(jsonInput);
@@ -233,28 +233,64 @@ export default function GeneratePage() {
     }
 
     if (prompts.length === 0) return;
-    setShowJsonInput(false);
-    setJsonInput("");
-    setError(null);
-    setIsGenerating(true);
 
-    // Add placeholders
-    const placeholders: GenerationResult[] = prompts.map((p) => ({
+    // Add as results with "idle" status — user can review then generate
+    const newResults: GenerationResult[] = prompts.map((p) => ({
       id: crypto.randomUUID(),
       prompt: p,
       image: "",
       mimeType: "",
-      status: "generating" as const,
+      status: "idle" as const,
     }));
-    setResults((prev) => [...placeholders, ...prev]);
+    setResults((prev) => [...newResults, ...prev]);
+    setShowJsonInput(false);
+    setJsonInput("");
+    setError(null);
+  }, [jsonInput]);
 
-    // Generate sequentially
-    for (const placeholder of placeholders) {
+  const handleGenerateRow = useCallback(
+    async (id: string) => {
+      const row = results.find((r) => r.id === id);
+      if (!row || row.status !== "idle") return;
+
+      setResults((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "generating" as const } : r))
+      );
+
       try {
-        const result = await generateImage(placeholder.prompt, referenceImages);
+        const result = await generateImage(row.prompt, referenceImages);
         setResults((prev) =>
           prev.map((r) =>
-            r.id === placeholder.id
+            r.id === id
+              ? { ...r, image: result.image, mimeType: result.mimeType, status: "done" as const }
+              : r
+          )
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Generation failed";
+        setResults((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: "failed" as const, error: message } : r))
+        );
+      }
+    },
+    [results, referenceImages]
+  );
+
+  const handleGenerateAllIdle = useCallback(async () => {
+    const idleRows = results.filter((r) => r.status === "idle");
+    if (idleRows.length === 0) return;
+    setIsGenerating(true);
+
+    for (const row of idleRows) {
+      setResults((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, status: "generating" as const } : r))
+      );
+
+      try {
+        const result = await generateImage(row.prompt, referenceImages);
+        setResults((prev) =>
+          prev.map((r) =>
+            r.id === row.id
               ? { ...r, image: result.image, mimeType: result.mimeType, status: "done" as const }
               : r
           )
@@ -263,14 +299,14 @@ export default function GeneratePage() {
         const message = err instanceof Error ? err.message : "Generation failed";
         setResults((prev) =>
           prev.map((r) =>
-            r.id === placeholder.id ? { ...r, status: "failed" as const, error: message } : r
+            r.id === row.id ? { ...r, status: "failed" as const, error: message } : r
           )
         );
       }
     }
 
     setIsGenerating(false);
-  }, [jsonInput, referenceImages]);
+  }, [results, referenceImages]);
 
   const handleDownload = useCallback((result: GenerationResult) => {
     const ext = result.mimeType.split("/")[1] || "png";
@@ -430,11 +466,11 @@ export default function GeneratePage() {
               rows={4}
             />
             <button
-              onClick={handleJsonGenerate}
-              disabled={!jsonInput.trim() || isGenerating}
+              onClick={handleJsonImport}
+              disabled={!jsonInput.trim()}
               className="cursor-pointer rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Generate All from JSON
+              Import Prompts
             </button>
           </div>
         )}
@@ -498,13 +534,34 @@ export default function GeneratePage() {
       {/* Results */}
       {results.length > 0 && (
         <div className="mt-8 space-y-4">
-          <h2 className="text-sm font-medium text-neutral-400">Results</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-neutral-400">Results</h2>
+            {results.some((r) => r.status === "idle") && (
+              <button
+                onClick={handleGenerateAllIdle}
+                disabled={isGenerating}
+                className="cursor-pointer rounded-md bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? "Generating..." : `Generate All (${results.filter((r) => r.status === "idle").length})`}
+              </button>
+            )}
+          </div>
           {results.map((result) => (
             <div
               key={result.id}
               className="rounded-lg border border-neutral-800 bg-neutral-950 p-4"
             >
               <p className="mb-3 text-xs text-neutral-500">{result.prompt}</p>
+
+              {result.status === "idle" && (
+                <button
+                  onClick={() => handleGenerateRow(result.id)}
+                  disabled={isGenerating}
+                  className="w-full cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 py-2 text-xs text-neutral-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Generate
+                </button>
+              )}
 
               {result.status === "generating" && (
                 <div className="flex aspect-video items-center justify-center rounded-md border border-neutral-800 bg-neutral-900">
