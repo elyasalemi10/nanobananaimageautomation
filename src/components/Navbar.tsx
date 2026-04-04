@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+const links = [
+  { href: "/generate", label: "Generate" },
+  { href: "/remove-watermark", label: "Remove Watermark" },
+];
+
 export default function Navbar() {
   const pathname = usePathname();
 
@@ -11,36 +16,19 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <span className="text-lg font-bold text-white">Nano Banana</span>
         <div className="flex gap-1">
-          <Link
-            href="/generate"
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              pathname === "/generate"
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            Generate
-          </Link>
-          <Link
-            href="/queue"
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              pathname === "/queue"
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            Queue
-          </Link>
-          <Link
-            href="/remove-watermark"
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              pathname === "/remove-watermark"
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-400 hover:text-white"
-            }`}
-          >
-            Remove Watermark
-          </Link>
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                pathname === link.href
+                  ? "bg-neutral-800 text-white"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
       </div>
     </nav>
