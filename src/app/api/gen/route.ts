@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Fallback chain: try models in order if one is rate-limited
 const MODELS = [
-  "gemini-2.5-flash-image",
-  "nano-banana-pro-preview",
   "gemini-3.1-flash-image-preview",
+  "nano-banana-pro-preview",
+  "gemini-2.5-flash-image",
 ];
 const MAX_RETRIES = 3;
 

@@ -6,6 +6,32 @@ import ImagePreview from "@/components/ImagePreview";
 
 const MAX_IMAGES = 14;
 const PRESETS_STORAGE_KEY = "nano-banana-presets";
+const MAX_REF_IMAGE_DIMENSION = 1024; // Resize reference images to max 1024px
+
+// Resize image to fit within maxDim, return base64 jpeg
+function resizeImageBase64(base64: string, mimeType: string, maxDim: number): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width <= maxDim && height <= maxDim) {
+        resolve({ base64, mimeType });
+        return;
+      }
+      const scale = Math.min(maxDim / width, maxDim / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
+    };
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
 
 interface Row {
   id: string;
@@ -101,23 +127,23 @@ export default function GeneratePage() {
       const toProcess = Array.from(files).slice(0, remaining);
 
       const newImages: ReferenceImage[] = await Promise.all(
-        toProcess.map(
-          (file) =>
-            new Promise<ReferenceImage>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const dataUrl = reader.result as string;
-                resolve({
-                  id: crypto.randomUUID(),
-                  base64: dataUrl.split(",")[1],
-                  mimeType: file.type as ReferenceImage["mimeType"],
-                  name: file.name,
-                  size: file.size,
-                });
-              };
-              reader.readAsDataURL(file);
-            })
-        )
+        toProcess.map(async (file) => {
+          const raw = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          const rawBase64 = raw.split(",")[1];
+          // Resize to keep request size under Vercel's 4.5MB limit
+          const resized = await resizeImageBase64(rawBase64, file.type, MAX_REF_IMAGE_DIMENSION);
+          return {
+            id: crypto.randomUUID(),
+            base64: resized.base64,
+            mimeType: resized.mimeType as ReferenceImage["mimeType"],
+            name: file.name,
+            size: resized.base64.length,
+          };
+        })
       );
 
       updateRow(rowId, { referenceImages: [...row.referenceImages, ...newImages] });
@@ -198,17 +224,26 @@ export default function GeneratePage() {
     reader.readAsDataURL(file);
   }, []);
 
-  const saveNewPreset = useCallback(() => {
+  const saveNewPreset = useCallback(async () => {
     if (!pendingPresetFile || !newPresetName.trim()) return;
+    // Resize for storage (512px max to keep localStorage small)
+    const resized = await resizeImageBase64(pendingPresetFile.base64, pendingPresetFile.mimeType, 512);
     const preset: Preset = {
       id: crypto.randomUUID(),
       name: newPresetName.trim(),
-      base64: pendingPresetFile.base64,
-      mimeType: pendingPresetFile.mimeType,
+      base64: resized.base64,
+      mimeType: resized.mimeType,
     };
     const updated = [...presets, preset];
     setPresets(updated);
-    savePresetsToStorage(updated);
+    try {
+      savePresetsToStorage(updated);
+    } catch {
+      // If still too large, warn user
+      setError("Preset image too large to save. Try a smaller image.");
+      setPresets(presets);
+      return;
+    }
     setShowNewPreset(false);
     setNewPresetName("");
     setPendingPresetFile(null);
