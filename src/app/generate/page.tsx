@@ -102,6 +102,7 @@ export default function GeneratePage() {
   const [pendingPresetFile, setPendingPresetFile] = useState<{ base64: string; mimeType: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const presetFileRef = useRef<HTMLInputElement>(null);
+  const watermarkFileRef = useRef<HTMLInputElement>(null);
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   useEffect(() => {
@@ -285,6 +286,42 @@ export default function GeneratePage() {
     setError(null);
   }, [jsonInput, activePresets, presets]);
 
+  // Remove watermarks — upload images, create rows with watermark removal prompt
+  const handleWatermarkFiles = useCallback(
+    async (files: FileList) => {
+      const WATERMARK_PROMPT = "remove the diamond shaped white shape in the bottom right of the attached image";
+      const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (imageFiles.length === 0) return;
+
+      const newRows: Row[] = await Promise.all(
+        imageFiles.map(async (file) => {
+          const raw = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          const rawBase64 = raw.split(",")[1];
+          const resized = await resizeImageBase64(rawBase64, file.type, MAX_REF_IMAGE_DIMENSION);
+
+          const row = createRow(WATERMARK_PROMPT);
+          row.referenceImages = [
+            {
+              id: crypto.randomUUID(),
+              base64: resized.base64,
+              mimeType: resized.mimeType as ReferenceImage["mimeType"],
+              name: file.name,
+              size: resized.base64.length,
+            },
+          ];
+          return row;
+        })
+      );
+
+      setRows((prev) => [...prev, ...newRows]);
+    },
+    []
+  );
+
   // Generate all rows that have a prompt
   const handleGenerateAll = useCallback(async () => {
     const toGenerate = rows.filter((r) => r.prompt.trim() && (r.status === "idle" || r.status === "failed"));
@@ -372,6 +409,23 @@ export default function GeneratePage() {
         >
           JSON Batch
         </button>
+        <button
+          onClick={() => watermarkFileRef.current?.click()}
+          className="cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-300"
+        >
+          Remove Watermarks
+        </button>
+        <input
+          ref={watermarkFileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) handleWatermarkFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
       </div>
 
       {/* New preset form */}

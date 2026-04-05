@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/generate", label: "Generate" },
-  { href: "/remove-watermark", label: "Remove Watermark" },
 ];
 
 export default function Navbar() {
