@@ -324,23 +324,31 @@ export default function GeneratePage() {
 
   // Generate all rows that have a prompt
   const handleGenerateAll = useCallback(async () => {
-    const toGenerate = rows.filter((r) => r.prompt.trim() && (r.status === "idle" || r.status === "failed"));
+    const toGenerate = rows
+      .filter((r) => r.prompt.trim() && (r.status === "idle" || r.status === "failed"))
+      .map((r) => ({ id: r.id, prompt: r.prompt, referenceImages: r.referenceImages }));
     if (toGenerate.length === 0) return;
     setIsGenerating(true);
 
-    for (const row of toGenerate) {
-      updateRow(row.id, { status: "generating", error: undefined });
+    for (const { id, prompt, referenceImages } of toGenerate) {
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "generating" as const, error: undefined } : r))
+      );
 
       try {
-        const result = await callGenerate(row.prompt, row.referenceImages);
-        updateRow(row.id, { status: "done", resultImage: result.image, resultMimeType: result.mimeType });
+        const result = await callGenerate(prompt, referenceImages);
+        setRows((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: "done" as const, resultImage: result.image, resultMimeType: result.mimeType } : r))
+        );
       } catch (err) {
-        updateRow(row.id, { status: "failed", error: err instanceof Error ? err.message : "Failed" });
+        setRows((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: "failed" as const, error: err instanceof Error ? err.message : "Failed" } : r))
+        );
       }
     }
 
     setIsGenerating(false);
-  }, [rows, updateRow]);
+  }, [rows]);
 
   const handleDownload = useCallback((row: Row) => {
     if (!row.resultImage || !row.resultMimeType) return;

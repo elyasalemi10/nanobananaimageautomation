@@ -138,19 +138,21 @@ export default function PipelinePage() {
     setIsGeneratingImages(true);
     setError(null);
 
-    for (let i = 0; i < timeline.length; i++) {
-      const entry = timeline[i];
-      if (entry.status === "done") continue;
+    // Snapshot entries to process — avoids stale closure issues
+    const toProcess = timeline
+      .filter((t) => t.status !== "done")
+      .map((t) => ({ index: t.index, prompt: t.prompt }));
 
+    for (const { index, prompt } of toProcess) {
       setTimeline((prev) =>
-        prev.map((t) => (t.index === entry.index ? { ...t, status: "generating" as const } : t))
+        prev.map((t) => (t.index === index ? { ...t, status: "generating" as const } : t))
       );
 
       try {
         const res = await fetch("/api/gen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: entry.prompt, referenceImages: [] }),
+          body: JSON.stringify({ prompt, referenceImages: [] }),
         });
 
         if (!res.ok) {
@@ -161,7 +163,7 @@ export default function PipelinePage() {
         const data = await res.json();
         setTimeline((prev) =>
           prev.map((t) =>
-            t.index === entry.index
+            t.index === index
               ? { ...t, status: "done" as const, image: data.image, mimeType: data.mimeType }
               : t
           )
@@ -170,7 +172,7 @@ export default function PipelinePage() {
         const message = err instanceof Error ? err.message : "Failed";
         setTimeline((prev) =>
           prev.map((t) =>
-            t.index === entry.index ? { ...t, status: "failed" as const, error: message } : t
+            t.index === index ? { ...t, status: "failed" as const, error: message } : t
           )
         );
       }

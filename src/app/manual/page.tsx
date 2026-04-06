@@ -160,27 +160,38 @@ export default function ManualPage() {
   const handleGenerateImages = useCallback(async () => {
     setIsGenerating(true);
     setError(null);
-    for (const seg of segments) {
-      if (seg.status === "done" || !seg.prompt.trim()) continue;
-      updateSegment(seg.id, { status: "generating", error: undefined });
+
+    // Snapshot to avoid stale closure
+    const toProcess = segments
+      .filter((s) => s.status !== "done" && s.prompt.trim())
+      .map((s) => ({ id: s.id, prompt: s.prompt }));
+
+    for (const { id, prompt } of toProcess) {
+      setSegments((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status: "generating" as const, error: undefined } : s))
+      );
       try {
         const res = await fetch("/api/gen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: seg.prompt, referenceImages: [] }),
+          body: JSON.stringify({ prompt, referenceImages: [] }),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Failed" }));
           throw new Error(err.error);
         }
         const data = await res.json();
-        updateSegment(seg.id, { status: "done", image: data.image, mimeType: data.mimeType });
+        setSegments((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, status: "done" as const, image: data.image, mimeType: data.mimeType } : s))
+        );
       } catch (err) {
-        updateSegment(seg.id, { status: "failed", error: err instanceof Error ? err.message : "Failed" });
+        setSegments((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, status: "failed" as const, error: err instanceof Error ? err.message : "Failed" } : s))
+        );
       }
     }
     setIsGenerating(false);
-  }, [segments, updateSegment]);
+  }, [segments]);
 
   // Download
   const downloadImage = useCallback((seg: Segment) => {
