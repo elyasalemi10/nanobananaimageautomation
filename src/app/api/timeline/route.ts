@@ -46,7 +46,7 @@ The prompts should be vivid, detailed descriptions of scenes that match what is 
           { role: "system", content: systemPrompt },
           { role: "user", content: body.transcript },
         ],
-        temperature: 0.7,
+        temperature: 1,
       }),
     });
 
