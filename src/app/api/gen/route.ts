@@ -7,7 +7,7 @@ const MODELS = [
   "nano-banana-pro-preview",
   "gemini-2.5-flash-image",
 ];
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
 
 function getAuth(): GoogleAuth {
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
             "Content-Type": "application/json",
           },
           body: requestBody,
+          signal: AbortSignal.timeout(45000), // 45s timeout per attempt
         });
 
         if (apiResponse.ok) {
@@ -140,8 +141,8 @@ export async function POST(req: NextRequest) {
         // Rate limited — check for retry delay
         if (apiResponse.status === 429) {
           const retryMs = parseRetryDelay(errBody);
-          // If retry delay is short enough (< 15s) and we have retries left, wait and retry same model
-          if (retryMs > 0 && retryMs <= 15000 && attempt < MAX_RETRIES - 1) {
+          // If retry delay is short enough (< 8s) and we have retries left, wait and retry same model
+          if (retryMs > 0 && retryMs <= 8000 && attempt < MAX_RETRIES - 1) {
             console.log(`Rate limited on ${model}, retrying in ${retryMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
             await sleep(retryMs);
             continue;
