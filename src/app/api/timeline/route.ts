@@ -41,7 +41,7 @@ The prompts should be vivid, detailed descriptions of scenes that match what is 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "kimi-k2-0711",
+        model: "kimi-k2",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: body.transcript },
