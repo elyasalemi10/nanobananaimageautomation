@@ -248,14 +248,21 @@ export default function PipelinePage() {
 
     let imageAssets = "";
     let imageClips = "";
-    let offset = 0;
 
-    for (const entry of timeline) {
+    for (let i = 0; i < timeline.length; i++) {
+      const entry = timeline[i];
       const durFrames = Math.round((entry.end - entry.start) * fps);
-      const startFrames = Math.round(entry.start * fps);
+      const offsetFrames = Math.round(entry.start * fps);
       imageAssets += `        <asset id="image_${entry.index}" name="${entry.index}.jpeg" src="${basePath}${entry.index}.jpeg" hasVideo="1" format="r1" />\n`;
-      imageClips += `            <asset-clip ref="image_${entry.index}" offset="${startFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${entry.index}.jpeg" />\n`;
-      offset += durFrames;
+
+      if (i === 0) {
+        // First clip: attach audio as a connected clip inside it
+        imageClips += `                        <asset-clip ref="image_${entry.index}" offset="${offsetFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${entry.index}.jpeg">\n`;
+        imageClips += `                            <asset-clip ref="audio_1" lane="-1" offset="${offsetFrames}/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" role="dialogue" />\n`;
+        imageClips += `                        </asset-clip>\n`;
+      } else {
+        imageClips += `                        <asset-clip ref="image_${entry.index}" offset="${offsetFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${entry.index}.jpeg" />\n`;
+      }
     }
 
     const fcpxml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -271,7 +278,6 @@ ${imageAssets}    </resources>
                 <sequence format="r1" duration="${totalFrames}/${fps}s" tcStart="0/${fps}s">
                     <spine>
 ${imageClips}                    </spine>
-                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" lane="-1" />
                 </sequence>
             </project>
         </event>

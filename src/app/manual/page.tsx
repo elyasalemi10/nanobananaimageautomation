@@ -215,11 +215,19 @@ export default function ManualPage() {
     let imageAssets = "";
     let imageClips = "";
 
-    for (const seg of segments) {
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
       const durFrames = Math.round((seg.end - seg.start) * fps);
-      const startFrames = Math.round(seg.start * fps);
+      const offsetFrames = Math.round(seg.start * fps);
       imageAssets += `        <asset id="image_${seg.index}" name="${seg.index}.jpeg" src="${basePath}${seg.index}.jpeg" hasVideo="1" format="r1" />\n`;
-      imageClips += `            <asset-clip ref="image_${seg.index}" offset="${startFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${seg.index}.jpeg" />\n`;
+
+      if (i === 0) {
+        imageClips += `                        <asset-clip ref="image_${seg.index}" offset="${offsetFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${seg.index}.jpeg">\n`;
+        imageClips += `                            <asset-clip ref="audio_1" lane="-1" offset="${offsetFrames}/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" role="dialogue" />\n`;
+        imageClips += `                        </asset-clip>\n`;
+      } else {
+        imageClips += `                        <asset-clip ref="image_${seg.index}" offset="${offsetFrames}/${fps}s" duration="${durFrames}/${fps}s" name="${seg.index}.jpeg" />\n`;
+      }
     }
 
     const fcpxml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -235,7 +243,6 @@ ${imageAssets}    </resources>
                 <sequence format="r1" duration="${totalFrames}/${fps}s" tcStart="0/${fps}s">
                     <spine>
 ${imageClips}                    </spine>
-                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" lane="-1" />
                 </sequence>
             </project>
         </event>
