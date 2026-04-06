@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/generate", label: "Generate" },
+  { href: "/pipeline", label: "Pipeline" },
+  { href: "/manual", label: "Manual" },
 ];
 
 export default function Navbar() {
