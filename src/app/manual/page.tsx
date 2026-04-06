@@ -33,6 +33,7 @@ function createSegment(index: number, start = 0, end = 0): Segment {
 
 export default function ManualPage() {
   const [folderPath, setFolderPath] = useState("");
+  const [audioFilename, setAudioFilename] = useState("audio.mp4");
   const [words, setWords] = useState<Word[]>([]);
   const [audioDuration, setAudioDuration] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([createSegment(1)]);
@@ -49,10 +50,15 @@ export default function ManualPage() {
     setIsTranscribing(true);
     setError(null);
     try {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "mp3" || ext === "mp4") {
+        setAudioFilename(`audio.${ext}`);
+      }
+
       const buffer = await file.arrayBuffer();
       const res = await fetch("/api/transcribe", {
         method: "POST",
-        headers: { "Content-Type": file.type || "audio/mp4" },
+        headers: { "Content-Type": file.type || "audio/mpeg" },
         body: buffer,
       });
       if (!res.ok) {
@@ -210,7 +216,7 @@ export default function ManualPage() {
 <fcpxml version="1.11">
     <resources>
         <format id="r1" name="FFVideoFormat1080p30" frameDuration="1/${fps}s" width="1920" height="1080" />
-        <asset id="audio_1" name="audio.mp4" src="${basePath}audio.mp4" hasAudio="1" format="r1" duration="${totalFrames}/${fps}s" />
+        <asset id="audio_1" name="${audioFilename}" src="${basePath}${audioFilename}" hasAudio="1" format="r1" duration="${totalFrames}/${fps}s" />
 ${imageAssets}    </resources>
     <library>
         <event name="Nano Banana Export">
@@ -218,7 +224,7 @@ ${imageAssets}    </resources>
                 <sequence format="r1" duration="${totalFrames}/${fps}s" tcStart="0/${fps}s">
                     <spine>
 ${imageClips}                    </spine>
-                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="audio.mp4" lane="-1" />
+                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" lane="-1" />
                 </sequence>
             </project>
         </event>

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const contentType = req.headers.get("content-type") || "audio/mp4";
+  const contentType = req.headers.get("content-type") || "audio/mpeg";
   const body = await req.arrayBuffer();
 
   if (!body || body.byteLength === 0) {

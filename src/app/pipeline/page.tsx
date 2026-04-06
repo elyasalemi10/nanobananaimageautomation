@@ -33,6 +33,7 @@ function secondsToFrames(s: number, fps = 30): string {
 export default function PipelinePage() {
   const [step, setStep] = useState(1);
   const [folderPath, setFolderPath] = useState("");
+  const [audioFilename, setAudioFilename] = useState("audio.mp4");
   const [words, setWords] = useState<Word[]>([]);
   const [audioDuration, setAudioDuration] = useState(0);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -61,10 +62,16 @@ export default function PipelinePage() {
     setError(null);
 
     try {
+      // Detect audio filename for FCPXML export
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (ext === "mp3" || ext === "mp4") {
+        setAudioFilename(`audio.${ext}`);
+      }
+
       const buffer = await file.arrayBuffer();
       const res = await fetch("/api/transcribe", {
         method: "POST",
-        headers: { "Content-Type": file.type || "audio/mp4" },
+        headers: { "Content-Type": file.type || "audio/mpeg" },
         body: buffer,
       });
 
@@ -254,7 +261,7 @@ export default function PipelinePage() {
 <fcpxml version="1.11">
     <resources>
         <format id="r1" name="FFVideoFormat1080p30" frameDuration="1/${fps}s" width="1920" height="1080" />
-        <asset id="audio_1" name="audio.mp4" src="${basePath}audio.mp4" hasAudio="1" format="r1" duration="${totalFrames}/${fps}s" />
+        <asset id="audio_1" name="${audioFilename}" src="${basePath}${audioFilename}" hasAudio="1" format="r1" duration="${totalFrames}/${fps}s" />
 ${imageAssets}    </resources>
     <library>
         <event name="Nano Banana Export">
@@ -262,7 +269,7 @@ ${imageAssets}    </resources>
                 <sequence format="r1" duration="${totalFrames}/${fps}s" tcStart="0/${fps}s">
                     <spine>
 ${imageClips}                    </spine>
-                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="audio.mp4" lane="-1" />
+                    <asset-clip ref="audio_1" offset="0/${fps}s" duration="${totalFrames}/${fps}s" name="${audioFilename}" lane="-1" />
                 </sequence>
             </project>
         </event>
@@ -318,7 +325,7 @@ ${imageClips}                    </spine>
         <div className="space-y-4">
           <h2 className="text-sm font-medium">Select Project Folder</h2>
           <p className="text-xs text-neutral-500">
-            Choose the folder where your <code className="text-neutral-400">audio.mp4</code> lives and where images will be saved.
+            Choose the folder where your <code className="text-neutral-400">{audioFilename}</code> lives and where images will be saved.
           </p>
           <input
             type="file"
@@ -334,7 +341,7 @@ ${imageClips}                    </spine>
             </div>
           )}
           <div className="rounded-md bg-yellow-900/20 border border-yellow-800/40 px-3 py-2 text-xs text-yellow-400">
-            Make sure <code>audio.mp4</code> already exists in this folder.
+            Make sure <code>{audioFilename}</code> already exists in this folder.
           </div>
           <button
             onClick={() => setStep(2)}
@@ -597,7 +604,7 @@ ${imageClips}                    </spine>
             </label>
             <label className="flex items-center gap-2 text-xs text-neutral-400">
               <input type="checkbox" className="rounded" />
-              Ensure <code className="text-neutral-300">audio.mp4</code> is in the folder
+              Ensure <code className="text-neutral-300">{audioFilename}</code> is in the folder
             </label>
             <label className="flex items-center gap-2 text-xs text-neutral-400">
               <input type="checkbox" className="rounded" />
