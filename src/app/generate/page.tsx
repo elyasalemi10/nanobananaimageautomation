@@ -33,6 +33,8 @@ function resizeImageBase64(base64: string, mimeType: string, maxDim: number): Pr
   });
 }
 
+type AspectRatio = "16:9" | "9:16";
+
 interface Row {
   id: string;
   prompt: string;
@@ -41,6 +43,7 @@ interface Row {
   resultImage?: string;
   resultMimeType?: string;
   error?: string;
+  aspectRatio: AspectRatio;
 }
 
 interface Preset {
@@ -51,7 +54,7 @@ interface Preset {
 }
 
 function createRow(prompt = ""): Row {
-  return { id: crypto.randomUUID(), prompt, referenceImages: [], status: "idle" };
+  return { id: crypto.randomUUID(), prompt, referenceImages: [], status: "idle", aspectRatio: "16:9" };
 }
 
 function loadPresets(): Preset[] {
@@ -69,7 +72,8 @@ function savePresetsToStorage(presets: Preset[]) {
 
 async function callGenerate(
   prompt: string,
-  referenceImages: ReferenceImage[]
+  referenceImages: ReferenceImage[],
+  aspectRatio: AspectRatio
 ): Promise<{ image: string; mimeType: string }> {
   const res = await fetch("/api/gen", {
     method: "POST",
@@ -80,6 +84,7 @@ async function callGenerate(
         base64: img.base64,
         mimeType: img.mimeType,
       })),
+      aspectRatio,
     }),
   });
   if (!res.ok) {
@@ -326,17 +331,17 @@ export default function GeneratePage() {
   const handleGenerateAll = useCallback(async () => {
     const toGenerate = rows
       .filter((r) => r.prompt.trim() && (r.status === "idle" || r.status === "failed"))
-      .map((r) => ({ id: r.id, prompt: r.prompt, referenceImages: r.referenceImages }));
+      .map((r) => ({ id: r.id, prompt: r.prompt, referenceImages: r.referenceImages, aspectRatio: r.aspectRatio }));
     if (toGenerate.length === 0) return;
     setIsGenerating(true);
 
-    for (const { id, prompt, referenceImages } of toGenerate) {
+    for (const { id, prompt, referenceImages, aspectRatio } of toGenerate) {
       setRows((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: "generating" as const, error: undefined } : r))
       );
 
       try {
-        const result = await callGenerate(prompt, referenceImages);
+        const result = await callGenerate(prompt, referenceImages, aspectRatio);
         setRows((prev) =>
           prev.map((r) => (r.id === id ? { ...r, status: "done" as const, resultImage: result.image, resultMimeType: result.mimeType } : r))
         );
@@ -542,6 +547,18 @@ export default function GeneratePage() {
                   {row.referenceImages.length > 0 && (
                     <span className="text-xs text-neutral-600">{row.referenceImages.length}/{MAX_IMAGES}</span>
                   )}
+                  <label className="flex items-center gap-1 text-xs text-neutral-500">
+                    Aspect
+                    <select
+                      value={row.aspectRatio}
+                      onChange={(e) => updateRow(row.id, { aspectRatio: e.target.value as AspectRatio })}
+                      disabled={row.status === "generating"}
+                      className="cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 hover:text-white disabled:opacity-40"
+                    >
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16</option>
+                    </select>
+                  </label>
                 </div>
 
                 {row.referenceImages.length > 0 && (
