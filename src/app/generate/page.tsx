@@ -524,6 +524,20 @@ export default function GeneratePage() {
                   rows={2}
                 />
 
+                {/* Aspect ratio picker for this row */}
+                <div className="flex items-center gap-2 rounded-md border border-blue-800/50 bg-blue-950/30 px-3 py-2">
+                  <span className="text-xs font-medium text-blue-300">Aspect ratio:</span>
+                  <select
+                    value={row.aspectRatio ?? "16:9"}
+                    onChange={(e) => updateRow(row.id, { aspectRatio: e.target.value as AspectRatio })}
+                    disabled={row.status === "generating"}
+                    className="cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-white hover:border-blue-600 disabled:opacity-40"
+                  >
+                    <option value="16:9">16:9 (landscape)</option>
+                    <option value="9:16">9:16 (portrait)</option>
+                  </select>
+                </div>
+
                 {/* Reference images for this row */}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -547,18 +561,6 @@ export default function GeneratePage() {
                   {row.referenceImages.length > 0 && (
                     <span className="text-xs text-neutral-600">{row.referenceImages.length}/{MAX_IMAGES}</span>
                   )}
-                  <label className="flex items-center gap-1 text-xs text-neutral-500">
-                    Aspect
-                    <select
-                      value={row.aspectRatio}
-                      onChange={(e) => updateRow(row.id, { aspectRatio: e.target.value as AspectRatio })}
-                      disabled={row.status === "generating"}
-                      className="cursor-pointer rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 hover:text-white disabled:opacity-40"
-                    >
-                      <option value="16:9">16:9</option>
-                      <option value="9:16">9:16</option>
-                    </select>
-                  </label>
                 </div>
 
                 {row.referenceImages.length > 0 && (
