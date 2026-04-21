@@ -82,12 +82,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const aspectRatio = body.aspectRatio === "9:16" ? "9:16" : "16:9";
+
   const requestBody = JSON.stringify({
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseModalities: ["TEXT", "IMAGE"],
       imageConfig: {
-        aspectRatio: "16:9",
+        aspectRatio,
       },
     },
   });

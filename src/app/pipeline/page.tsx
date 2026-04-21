@@ -9,6 +9,8 @@ interface Word {
   end: number;
 }
 
+type AspectRatio = "16:9" | "9:16";
+
 interface TimelineEntry {
   index: number;
   start: number;
@@ -18,6 +20,7 @@ interface TimelineEntry {
   mimeType?: string;
   status: "idle" | "generating" | "done" | "failed";
   error?: string;
+  aspectRatio: AspectRatio;
 }
 
 function formatTime(s: number): string {
@@ -123,6 +126,7 @@ export default function PipelinePage() {
           end: t.end,
           prompt: t.prompt,
           status: "idle" as const,
+          aspectRatio: "16:9" as const,
         })
       );
       setTimeline(entries);
@@ -141,9 +145,9 @@ export default function PipelinePage() {
     // Snapshot entries to process — avoids stale closure issues
     const toProcess = timeline
       .filter((t) => t.status !== "done")
-      .map((t) => ({ index: t.index, prompt: t.prompt }));
+      .map((t) => ({ index: t.index, prompt: t.prompt, aspectRatio: t.aspectRatio }));
 
-    for (const { index, prompt } of toProcess) {
+    for (const { index, prompt, aspectRatio } of toProcess) {
       setTimeline((prev) =>
         prev.map((t) => (t.index === index ? { ...t, status: "generating" as const } : t))
       );
@@ -152,7 +156,7 @@ export default function PipelinePage() {
         const res = await fetch("/api/gen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, referenceImages: [] }),
+          body: JSON.stringify({ prompt, referenceImages: [], aspectRatio }),
         });
 
         if (!res.ok) {
@@ -194,7 +198,7 @@ export default function PipelinePage() {
         const res = await fetch("/api/gen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: entry.prompt, referenceImages: [] }),
+          body: JSON.stringify({ prompt: entry.prompt, referenceImages: [], aspectRatio: entry.aspectRatio }),
         });
 
         if (!res.ok) {
@@ -537,13 +541,33 @@ ${imageClips}                    </spine>
                   <span className="text-[10px] text-neutral-600">{formatTime(entry.start)}</span>
                 </div>
 
+                <div className="mb-1 flex items-center justify-end">
+                  <select
+                    value={entry.aspectRatio}
+                    onChange={(e) =>
+                      setTimeline((prev) =>
+                        prev.map((x) =>
+                          x.index === entry.index
+                            ? { ...x, aspectRatio: e.target.value as AspectRatio }
+                            : x
+                        )
+                      )
+                    }
+                    className="cursor-pointer rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-[10px] text-neutral-300 hover:text-white"
+                  >
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                  </select>
+                </div>
+
                 {entry.status === "idle" && (
-                  <div className="flex aspect-video items-center justify-center rounded bg-neutral-900 text-xs text-neutral-600">
+                  <div className={`flex ${entry.aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-video"} items-center justify-center rounded bg-neutral-900 text-xs text-neutral-600`}>
                     Waiting
                   </div>
                 )}
                 {entry.status === "generating" && (
-                  <div className="flex aspect-video items-center justify-center rounded bg-neutral-900">
+                  <div className={`flex ${entry.aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-video"} items-center justify-center rounded bg-neutral-900`}>
+
                     <svg className="h-5 w-5 animate-spin text-neutral-500" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -561,7 +585,7 @@ ${imageClips}                    </spine>
                 {entry.status === "failed" && (
                   <div
                     onClick={() => retryImage(entry.index)}
-                    className="flex aspect-video cursor-pointer items-center justify-center rounded bg-red-900/20 text-xs text-red-400 hover:bg-red-900/30"
+                    className={`flex ${entry.aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-video"} cursor-pointer items-center justify-center rounded bg-red-900/20 text-xs text-red-400 hover:bg-red-900/30`}
                   >
                     Failed — click to retry
                   </div>
